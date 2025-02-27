@@ -1,0 +1,70 @@
+name: sync
+
+services:
+  syncthing:
+    build:
+      context: .
+      target: syncthing
+      # args:
+      #   SYNCTHING_VERSION: latest
+    command:
+      - syncthing
+      - serve
+      - --config=/syncthing/config # config and certs location
+      - --data=/syncthing/db # db location
+      - --no-default-folder # do not create default Sync folder
+      - --no-browser # do not start browser
+    user: 1000:1001 # user_id:group_id to keep access to files
+    hostname: syncthing-server # syncthing instance name
+    ports:
+      - "8384:8384"       # Web GUI
+      - "22000:22000/tcp" # Sync Protocol
+      - "22000:22000/udp" # Sync Protocol (QUIC)
+      - "21027:21027/udp" # Local Discovery
+    volumes:
+      - ./syncthing/config:/syncthing/config # config and certs
+      - ./syncthing/db:/syncthing/db # metadata and logs
+      - ./syncthing/folders:/syncthing/folders # folders to sync
+    restart: unless-stopped
+
+  relay:
+    build:
+      context: .
+      target: strelaysrv
+      # args:
+      #   RELAYSRV_VERSION: latest
+    command:
+      - strelaysrv
+      # - -ext-address=public_ip:port
+      - -provided-by=Name
+      - -pools= # empty to not connect to public pool
+      - -status-srv= # relay Status port, empty to disable
+      - -keys=/relay # keys location
+      - -token=secret-pass # secure relay by password/token
+    user: 1000:1001
+    ports:
+      - "22069:22067"   # Relay Default Port
+      # - "22070:22070"   # Relay Status Port
+    volumes:
+      - ./relay:/relay
+    restart: unless-stopped
+
+  discovery:
+    build:
+      context: .
+      target: stdiscosrv
+      # args:
+      #   DISCOSRV_VERSION: latest
+    command:
+      - stdiscosrv
+      - --http # expose via http (should be behind proxy)
+      - --compression # use compression for responces
+      # - --listen="0.0.0.0:22026"
+      # - --metrics-listen=
+      - --db-dir=/discovery # db location
+    user: 1000:1001
+    ports:
+      - "22026:22026"   # Discovery Server Port
+    volumes:
+      - ./discovery:/discovery
+    restart: unless-stopped
